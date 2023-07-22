@@ -1,0 +1,195 @@
+% Special case 1: unlimited link capacities (routing = RNR, integral content placement)
+topology = 'Abovenet';
+% topology = 'Level3';
+% topology = 'VerioUS';
+
+% addpath('matlab_bgl');
+% >> cd C:\gurobi912\win64\matlab
+% >> gurobi_setup
+
+switch topology
+    case 'Abovenet'
+        C = 10; % total #items, following [Ioannidis18JSAC]
+        cmin = 1; cmax = 20; % min/max link cost according to [Ioannidis18JSAC], e.g., delay in ms
+        cmin_s = 100; cmax_s = 200; % min/max link cost from the remote server (delay in ms)
+        skewness = 1.2; % skewness is demands, with average rate of 1 per client [Ioannidis18JSAC]
+%         skewness = 0.7; % typical skewness in web requests [Breslau'99INFOCOM: "Web Caching and Zipf-like Distributions: Evidence and Implications"]        
+        c_v = 0; % cache capacity at switches/backbone nodes
+        c_client = 2; % cache capacity at clients/edge nodes
+        C_client = 1:4; 
+        deg_client = 3; % maximum degree of clients
+        n_client = 5;
+        k_paths = 10; % [Ioannidis18JSAC]
+        K_paths = [1 10 20 30];
+    case 'Level3'
+        C = 15; % total #items, following [Ioannidis18JSAC]5
+        cmin = 1; cmax = 20; % min/max link cost according to [Ioannidis18JSAC], e.g., delay in ms
+        cmin_s = 100; cmax_s = 200; % min/max link cost from the remote server (delay in ms)
+        skewness = 1.2; % typical skewness in web requests [Breslau'99INFOCOM: "Web Caching and Zipf-like Distributions: Evidence and Implications"]     
+        c_v = 0; % cache capacity at switches/backbone nodes
+        c_client = 2; % cache capacity at clients/edge nodes, following [Ioannidis18JSAC]
+        C_client = 1:4;        
+        deg_client = 5; %17; % maximum degree of clients
+        n_client = 8;
+        k_paths = 10; % [Ioannidis18JSAC]
+        K_paths = [1 10 20 30];
+    case 'VerioUS'
+        C = 50; % total #items, following [Ioannidis18JSAC]5
+        cmin = 1; cmax = 20; % min/max link cost according to [Ioannidis18JSAC], e.g., delay in ms
+        cmin_s = 100; cmax_s = 200; % min/max link cost from the remote server (delay in ms)        
+        skewness = 1.2; % typical skewness in web requests [Breslau'99INFOCOM: "Web Caching and Zipf-like Distributions: Evidence and Implications"]                
+        c_v = 0; % cache capacity at switches/backbone nodes
+        c_client = 2; % cache capacity at clients/edge nodes, following [Ioannidis18JSAC]
+        C_client = 1:4;                 
+        deg_client = 1; %17; % maximum degree of clients
+        n_client = 12; % #clients (with degree up to deg_client); note: this includes caches (but excludes the server)
+        k_paths = 10; % [Ioannidis18JSAC]
+        K_paths = [1 10 20 30];
+end
+
+load(['data/' topology '.mat']); % A: sparse adjacency matrix with binary entries
+A = full(A);
+V = length(A); 
+runs = 100; % tian, at least ten monte carlo runs.
+fontsize = 16;
+face_alpha=0.8;
+w1 = .85; 
+w2 = .4;
+
+%% vary edge cache capacity:
+% k_paths = 10;
+% C_client = [1 2 3 4 5]; % cache capacity at clients/edge nodes
+
+C_RNR = zeros(length(C_client),3); % C_RNR(i,1): routing cost in setting i under proposed solution; C_RNR(i,2): Ioannidis' solution; C_RNR(i,3): en-route caching along shortest paths to the server
+for rindx = 1:runs
+[ G,server,client,request ] = generate_instance_unlimited_link_capacities( A,cmin,cmax,cmin_s,cmax_s,deg_client,n_client,C,skewness );
+% generate candidate paths for [Ioannidis18JSAC]:
+netCostMatrix = G;
+netCostMatrix(A==0) = inf; 
+candidatePaths = cell(1,V);
+% method 2: find a k shortest paths for each requester for a fixed k
+% k_paths = 10; % [Ioannidis18JSAC]
+for i = 1:length(client)
+    [shortestPaths, totalCosts] = kShortestPath(netCostMatrix, server, client(i), k_paths); % shortestPaths: 1*k_paths cell array, shortestPaths{i}: node sequence for i-th shortest path; totalCosts: costs of the paths as 1*k_paths array
+    candidatePaths{client(i)} = shortestPaths;
+    disp(['client ' num2str(i) ': found ' num2str(k_paths) ' paths with stretch <= ' num2str(max(totalCosts)/min(totalCosts))])
+    if totalCosts(1) > min(totalCosts)+10^(-6)
+        error(['client ' num2str(i) ': the first k-shortest path is not the shortest path']);
+    end
+end% candidatePaths{i}{j}: j-th shortest path from node i (a client) to server
+candidatePaths1 = cell(1,V);
+for i=1:length(client)
+    candidatePaths1{client(i)} = candidatePaths{client(i)}(1);
+end
+for i_cv = 1:length(C_client)
+    c_client = C_client(i_cv);
+    disp(' ')
+    disp(['c_client = ' num2str(c_client)])
+    [ c_RNR, c_RNR_Ioannidis, c_RNR_SP ] = simulate_unlimited_link_capacities( A,C,c_v,c_client,k_paths,  G,server,client,request, candidatePaths, candidatePaths1);
+    C_RNR(i_cv,1) = C_RNR(i_cv,1)+c_RNR./sum(sum(request));
+    C_RNR(i_cv,2) = C_RNR(i_cv,2)+c_RNR_Ioannidis./sum(sum(request));
+    C_RNR(i_cv,3) = C_RNR(i_cv,3)+c_RNR_SP./sum(sum(request));
+end
+end
+C_RNR = C_RNR./runs; 
+
+save(['data/100_runs/no_link_capacity_cachecapacity_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_' topology '.mat'], 'C_client','C_RNR'); 
+%load(['data/final_results/no_link_capacity_cachecapacity_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_' topology '.mat'], 'C_client','C_RNR'); 
+
+% load(['data/no_link_capacity_cachecapacity_' topology '.mat']);
+figure;
+bar(C_client, C_RNR,w1,'FaceAlpha',face_alpha);
+b(1).FaceColor = [0 0.4470 0.7410];
+b(2).FaceColor = [0.8500 0.3250 0.0980];
+legend('Alg. 1','k shortest paths','shortest path');
+xlabel('cache capacity');
+ylabel('routing cost/request (ms)');
+set(gca, 'FontSize', fontsize);
+% title(['Topology ', topology, ', C=' num2str(C), ', skewness=' num2str(skewness)])
+saveas(gcf,['plot/100_runs/no_link_capacity_cachecapacity_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_skewness_' num2str(skewness) '_' topology],'epsc')
+
+% add voice when stop
+load handel;
+player = audioplayer(y, Fs);
+play(player)
+
+%% vary k_paths:
+% c_client = 2; % following [Ioannidis18JSAC]
+% K_paths = [1 10 20 30];
+
+C_RNR = zeros(length(K_paths),2); % C_RNR(i,1): routing cost in setting i under proposed solution; C_RNR(i,2): Ioannidis' solution; 
+for rindx = 1:runs    
+[ G,server,client,request ] = generate_instance_unlimited_link_capacities( A,cmin,cmax,cmin_s,cmax_s,deg_client,n_client,C,skewness );
+V = length(A);
+c_cache = ones(V,1)*c_v;
+c_cache(server) = C; 
+c_cache(client) = c_client;
+[ c_RNR, var_x, var_r ] = integral_caching_RNR( G, c_cache, request );
+C_RNR(:,1) = C_RNR(:,1) + c_RNR./sum(sum(request));
+% pre-compute k-shortest paths for speed:
+netCostMatrix = G;
+netCostMatrix(A==0) = inf;
+candidatePaths = cell(1,V);
+for i = 1:length(client)
+    [shortestPaths, totalCosts] = kShortestPath(netCostMatrix, server, client(i), max(K_paths)); % shortestPaths: 1*k_paths cell array, shortestPaths{i}: node sequence for i-th shortest path; totalCosts: costs of the paths as 1*k_paths array
+    candidatePaths{client(i)} = shortestPaths;
+    disp(['client ' num2str(i) ': found ' num2str(max(K_paths)) ' paths with stretch <= ' num2str(max(totalCosts)/min(totalCosts))])
+end
+for i_cv = 1:length(K_paths)
+    k_paths = K_paths(i_cv);
+    disp(' ')
+    disp(['k_paths = ' num2str(k_paths)])
+    candidatePaths1 = cell(1,V);
+    for i = 1:length(client)
+        candidatePaths1{client(i)} = candidatePaths{client(i)}(1:min(k_paths,length(candidatePaths{client(i)})));
+    end
+    [c_RNR_Ioannidis ] = integral_caching_RNR_Ioannidis( G, c_cache, request, candidatePaths1, client );
+    C_RNR(i_cv,2) = C_RNR(i_cv,2)+c_RNR_Ioannidis./sum(sum(request));
+end
+end
+C_RNR = C_RNR./runs; 
+
+save(['data/100_runs/no_link_capacity_candidatepaths_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_' topology '.mat'], 'K_paths','C_RNR','c_client'); 
+
+figure;
+bar(K_paths, C_RNR,w1,'FaceAlpha',face_alpha);
+b(1).FaceColor = [0 0.4470 0.7410];
+b(2).FaceColor = [0.8500 0.3250 0.0980];
+legend('Alg. 1','k shortest paths')
+xlabel('#candidate paths');
+ylabel('routing cost/request (ms)');
+set(gca, 'FontSize', fontsize);
+% title(['Topology ', topology, ', C=' num2str(C), ', skewness=' num2str(skewness)])
+saveas(gcf,['plot/100_runs/no_link_capacity_candidatepaths_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_skewness_' num2str(skewness) '_' topology],'epsc')
+
+% add voice when stop
+load handel;
+player = audioplayer(y, Fs);
+play(player)
+
+%% plot solid
+
+face_alpha=1;
+load(['data/100_runs/no_link_capacity_candidatepaths_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_' topology '.mat'], 'K_paths','C_RNR','c_client'); 
+
+figure;
+bar(K_paths, C_RNR,w1,'FaceAlpha',face_alpha);
+legend('Alg. 1','k shortest paths')
+xlabel('#candidate paths');
+ylabel('routing cost/request (ms)');
+set(gca, 'FontSize', fontsize);
+% title(['Topology ', topology, ', C=' num2str(C), ', skewness=' num2str(skewness)])
+saveas(gcf,['plot/100_runs/solid_no_link_capacity_candidatepaths_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_skewness_' num2str(skewness) '_' topology],'epsc')
+
+load('no_link_capacity_cachecapacity_C_10_edgecachesize_4_Abovenet.mat')
+face_alpha=1;
+figure;
+bar(C_client, C_RNR,w1,'FaceAlpha',face_alpha);
+legend('Alg. 1','k shortest paths','shortest path');
+xlabel('cache capacity');
+ylabel('routing cost/request (ms)');
+set(gca, 'FontSize', fontsize);
+% title(['Topology ', topology, ', C=' num2str(C), ', skewness=' num2str(skewness)])
+saveas(gcf,['plot/100_runs/solid_no_link_capacity_cachecapacity_C_' num2str(C) '_edgecachesize_' num2str(c_client) '_skewness_' num2str(skewness) '_' topology],'epsc')
+
+
