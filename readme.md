@@ -1,13 +1,13 @@
-# Attack Resilience of Cache Replacement Policies: Code and Data for Experiments in Mininet
+# Joint caching and routing with any topology: developed poly-time algorithms with approx. guarantees to minimize total cost, formulated as MILP, NP-hard. 
 
 **cite** contains a attack resilience analysis implementation for our [paper](https://nsrg.cse.psu.edu/tbd).  If you find this code useful in your research, please consider citing:
 
-    @INPROCEEDINGS{Xie22INFOCOM,
+    @INPROCEEDINGS{Xie22ICDCS,
       author = { Tian Xie and Ting He and Patrick McDaniel and Quinn Burke},
-      title = {Joint Caching and Routing in Software-Defined Cache Networks},
-      booktitle = {IEEE INFOCOM},
+      title = {Joint Caching and Routing in Cache Networks with Arbitrary Topology},
+      booktitle = {IEEE ICDCS},
       year = {2022},
-      month = {May}
+      month = {July}
     }
 
 This code was tested on Matlab R2019a.
@@ -169,10 +169,10 @@ CKEY=OPBI3X56
 # Citation
 **cite** contains a attack resilience analysis implementation for our [paper](https://nsrg.cse.psu.edu/files/tbd).  If you find this code useful in your research, please consider citing:
 
-    @INPROCEEDINGS{Xie22INFOCOM,
+    @INPROCEEDINGS{Xie22ICDCS,
       author = { Tian Xie and Ting He and Patrick McDaniel and Quinn Burke},
-      title = {Joint Caching and Routing in Software-Defined Cache Networks},
-      booktitle = {IEEE INFOCOM},
+      title = {Joint Caching and Routing in Cache Networks with Arbitrary Topology},
+      booktitle = {IEEE ICDCS},
       year = {2022},
-      month = {May}
+      month = {July}
     }
